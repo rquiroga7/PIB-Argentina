@@ -72,7 +72,8 @@ plot_evolution <- function(data, names, filename,quarters) {
     scale_x_continuous(expand = c(0, 0.5), minor_breaks = NULL,breaks=seq(2004,2024,1)) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none",
-          strip.text = element_text(size = 12, face = "bold"))
+          strip.text = element_text(size = 12, face = "bold"))+
+    labs(caption = "Datos INDEC. Análisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
     ggsave(paste0(filename,"_",quarters,".png"), dpi = 300)
 }
 
@@ -113,7 +114,8 @@ plot_evolutionall <- function(data, names, filename) {
     zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.50, 2024.50, 1)) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none",
-          strip.text = element_text(size = 12, face = "bold"))
+          strip.text = element_text(size = 12, face = "bold"))+
+    labs(caption = "Datos INDEC. Análisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
     ggsave(paste0(filename,".png"), dpi = 300)
 }
 
