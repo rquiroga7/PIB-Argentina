@@ -26,4 +26,4 @@ Por otro lado, el grueso de la industria y manufactura no-alimentos se recupera 
 Aquí podemos observar algunos rubros manufactureros en esa situación, Fabricación de maquinaria, de metales comunes, de productos minerales no metálicos y fabricación de vehículos.
 ![bajan1](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/bajan1.png)
 
-En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles similares a los de 2020-2021, como la construcción y la industria no-alimenticia. El comercio mayorista y minorista también se recuperó levemente en el tercer trimestre de 2024, pero aún está lejos de recuperar los niveles de 2023.
+En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles similares a los de 2020-2021, como la construcción y la industria no-alimenticia. El comercio mayorista y minorista se recuperó levemente entre el secundo y el tercer trimestre de 2024, pero aún está lejos de recuperar los niveles de 2023.
