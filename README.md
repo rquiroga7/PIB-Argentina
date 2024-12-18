@@ -6,7 +6,7 @@ Primero, analizamos todos los trimestres, para los rubros que yo considero más 
 
 ![grandes](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/grandes.png)
 
-Aquí se puede ver que hay rubros donde la actividad económica es mayor a la de 2023 como el campo y la elaboración de alimentos y bebidas, pero otros dos rubros de enorme peso en la economía argentina como el comercio y el resto de la industria manufacturera aún no recuperan los niveles de actividad de 2023, y de hecho se encuentran en niveles similares o inferiores a los de 2021.
+Aquí se puede ver que hay rubros donde la actividad económica es mayor a la de 2023 como el campo y la elaboración de alimentos y bebidas, pero otros dos rubros de enorme peso en la economía argentina como el comercio y el resto de la industria manufacturera aún no recuperan los niveles de actividad de 2023, y de hecho se encuentran en niveles similares a los de 2021 (comercio) o cercanos a los de la pandemia (industria no alimenticia).
 
 Esto puede observarse en un gráfico más simplificado donde sólo se comparan los valores de estas mismas industrias para el 3er trimestre:
 
