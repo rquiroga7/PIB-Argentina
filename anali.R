@@ -81,6 +81,7 @@ plot_evolution <- function(data, names, filename,quarters) {
 
 # Crear los gráficos
 for (quarter in c("Q3")) {
+  plot_evolution(data_long, c("Valor agregado bruto a precios básicos"), "Total", quarter)
   plot_evolution(data_long, c("Agricultura, ganadería, caza y silvicultura", "Elaboración de productos alimenticios y bebidas", "Industria manufacturera sin alimentos", "Comercio mayorista, minorista y reparaciones"), "grandes", quarter)
   
   # suben
@@ -121,6 +122,7 @@ plot_evolutionall <- function(data, names, filename) {
     ggsave(paste0(filename,".png"), dpi = 300)
 }
 
+plot_evolutionall(data_long2, c("Valor agregado bruto a precios básicos"), "Total")
 plot_evolutionall(data_long2, c("Agricultura, ganadería, caza y silvicultura", "Elaboración de productos alimenticios y bebidas", "Industria manufacturera sin alimentos", "Comercio mayorista, minorista y reparaciones"), "grandes")
 plot_evolutionall(data_long2, c("Cultivos agrícolas", "Elaboración de productos alimenticios y bebidas", "Restaurantes, bares y cantinas", "Cría de animales"), "suben")
 plot_evolutionall(data_long2, c("Electricidad, gas y agua", "Transporte, almacenamiento y comunicaciones", "Intermediación financiera", "Actividades inmobiliarias, empresariales y de alquiler"), "iguales")
