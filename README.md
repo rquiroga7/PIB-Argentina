@@ -2,7 +2,19 @@ Análisis del PIB de Argentina con Datos de INDEC
 
 Descargué, limpié, analicé y grafiqué los datos de Valor agregado bruto a precios básicos para distintos rubros de la economía argentina. Voy a proceder a realizar análisis de datos y sacaré conclusiones en base a esos datos, sin hacer análisis económico, lo cual no podría hacer pues no soy economista.
 
-Primero, analizamos todos los trimestres, para los rubros que yo considero más explicativos de la situación actual, indicando los terceros trimestres con un círculo en cada rubro
+
+
+Primero, miremos el VAB total desde 2004. 
+![total](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/Total.png)
+
+Vemos un gran crecimiento 2004-2011, luego estancamiento 2012-2018. Caída leve 2019, caída profunda por pandemia en 2020, recuperación 2021 y 2022 (el VAB más alto de la historia), caída 2023 y otra caída 2024.
+
+Si miramos toda la economía que no incluye al campo, la caída interanual de 2024 prácticamente se duplica. 
+![total](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/sin_campo.png)
+Es destacable que sin el campo, la economía en 2023 fue la mayor de la historia, y la de 2022 la segunda mayor. Notable a pesar de la altísima inflación.
+
+
+Ahora, miramos los rubros más significativos de la economía argentina, indicando los terceros trimestres con un círculo en cada rubro. El promedio anual se indica como una línea azul para cada año.
 
 ![grandes](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/grandes.png)
 
@@ -26,4 +38,4 @@ Por otro lado, el grueso de la industria y manufactura no-alimentos se recupera 
 Aquí podemos observar algunos rubros manufactureros en esa situación, Fabricación de maquinaria, de metales comunes, de productos minerales no metálicos y fabricación de vehículos.
 ![bajan1](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/bajan1.png)
 
-En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles similares a los de 2020-2021, como la construcción y la industria no-alimenticia. El comercio mayorista y minorista se recuperó levemente entre el secundo y el tercer trimestre de 2024, pero aún está lejos de recuperar los niveles de 2023.
+En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles similares a los de 2020-2021, como la construcción y la industria no-alimenticia. Mientras tanto, el comercio mayorista y minorista se recuperó levemente entre el secundo y el tercer trimestre de 2024, pero aún está lejos de recuperar los niveles de 2023.
