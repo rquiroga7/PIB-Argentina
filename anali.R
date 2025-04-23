@@ -5,9 +5,14 @@ library(ggplot2)
 library(zoo)
 #Cargar la libreria de read_excel
 library(readxl)
+#Cargar la libreria de read_excel
+library(readxl)
 
 # Leer el archivo CSV
 data <- read_csv("sh_VBP_VAB_12_24.csv",col_names = FALSE, skip=2)
+
+#Leer la pestaña 4, "Cuadro 3" del xls
+data2 <- read_excel("sh_VBP_VAB_03_25.xls", sheet = 4, skip = 5, col_names = FALSE)
 
 #Leer la pestaña 4, "Cuadro 3" del xls
 data2 <- read_excel("sh_VBP_VAB_03_25.xls", sheet = 4, skip = 5, col_names = FALSE)
@@ -23,8 +28,18 @@ columns_to_keep <- c(1, which(!(seq_along(data2) %% 6 %in% c(0, 1))))
 data2 <- data2[, columns_to_keep]
 
 
+# Identificar las columnas a mantener: columna 1 y aquellas que no son múltiplos de 6 o 6 + 1
+columns_to_keep <- c(1, which(!(seq_along(data2) %% 6 %in% c(0, 1))))
+# Subconjunto de datos para mantener solo las columnas identificadas
+data2 <- data2[, columns_to_keep]
+
+
 # Eliminar las filas 1 y 3
 data <- data[-c(1,3),]
+
+# Eliminar la fila 2
+data2 <- data2[-c(2),]
+
 
 # Eliminar la fila 2
 data2 <- data2[-c(2),]
@@ -33,9 +48,16 @@ data2 <- data2[-c(2),]
 data[is.na(data)] <- ""
 data2[is.na(data2)] <- ""
 
+data2[is.na(data2)] <- ""
+
 
 # Nuevo dataframe combinando datos con años y trimestres
 # Reemplazar la fila 2 con la fila de años, comenzando en 2004, repitiendo 4 veces cada uno, excepto para 2024
+#years <- c("",rep(2004:2023, each = 4),2024,2024,2024)
+years <- c("",rep(2004:2024, each = 4))
+#quarters<-c("",rep(c("Q1","Q2","Q3","Q4"),times=20),c("Q1","Q2","Q3"))
+quarters<-c("",rep(c("Q1","Q2","Q3","Q4"),times=21))
+data2 <- data.frame(rbind(years,quarters,data2))
 #years <- c("",rep(2004:2023, each = 4),2024,2024,2024)
 years <- c("",rep(2004:2024, each = 4))
 #quarters<-c("",rep(c("Q1","Q2","Q3","Q4"),times=20),c("Q1","Q2","Q3"))
@@ -51,6 +73,7 @@ names <- as.vector(data2[-c(1, 2), 1])
 
 # Pivotar a formato largo
 data_long <- data2[-c(1, 2), ] %>%
+  pivot_longer(cols = -1, names_to = "column", values_to = "value") %>%
   pivot_longer(cols = -1, names_to = "column", values_to = "value") %>%
   mutate(year = as.numeric(rep(years2, times = length(names))),
          quarter = rep(quarters2, times = length(names)),
@@ -121,6 +144,7 @@ plot_evolution <- function(data, names, filename,quarters) {
 
 # Crear los gráficos
 for (quarter in c("Q4")) {
+for (quarter in c("Q4")) {
   plot_evolution(data_long, c("Valor agregado bruto a precios básicos"), "Total", quarter)
   plot_evolution(data_long, c("Agricultura, ganadería, caza y silvicultura", "Elaboración de productos alimenticios y bebidas", "Industria manufacturera (no alimentos)", "Comercio mayorista, minorista y reparaciones"), "grandes", quarter)
   plot_evolution(data_long, c("Cultivos agrícolas", "Pesca", "Restaurantes, bares y cantinas", "Explotación de minas y canteras"), "suben", quarter)
@@ -150,16 +174,21 @@ plot_evolutionall <- function(data, names, filename, yearly = FALSE) {
     geom_line(size = 1.2) +
     ylab("Valor Agregado Bruto a Precios Básicos") +
     xlab("Año") +
-    ggtitle(paste0("VAB a Precios Básicos por sector económico para cada trimestre 2004-2024")) +
-    facet_wrap(~name, labeller=ggplot2::label_wrap_gen(width=30), scales = scalev, ncol = 2) +
+    ggtitle(paste0(paste0("VAB a Precios Básicos por sector económico para cada sector económico para cada trimestre 2004-2024"))) +
+    facet_wrap(~name, labeller=ggplot2::label_wrap_gen(width=30), labeller=ggplot2::label_wrap_gen(width=30), scales = scalev, ncol = 2) +
     theme_light() +
     # Etiquetar cada tercer trimestre con un punto
+    geom_point(data = data %>%  filter(name %in% names) %>% filter(quarter == "Q4"), aes(x = fecha, y = value,color=name), size = 2) +
     geom_point(data = data %>%  filter(name %in% names) %>% filter(quarter == "Q4"), aes(x = fecha, y = value,color=name), size = 2) +
     scale_y_continuous(labels = comma) +
     #zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.50, 2024.50, 1)) +
     zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.75, 2025.75, 1)) +
+    #zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.50, 2024.50, 1)) +
+    zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.75, 2025.75, 1)) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none", 
+          strip.text = element_text(size = stripsize, face = "bold"))+
+    labs(caption = "Datos INDEC. Análisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
           strip.text = element_text(size = stripsize, face = "bold"))+
     labs(caption = "Datos INDEC. Análisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
   if (yearly) {
@@ -176,9 +205,11 @@ plot_evolutionall <- function(data, names, filename, yearly = FALSE) {
     # Add yearly average line
      p <- p + geom_segment(data = yearly_avg, aes(x = start_date, xend = end_date, y = value, yend = value), color= "blue", size = 1)
      p <- p + labs(caption = "Datos INDEC. Datos del trimeste correspondiente a cada año señalados con un círculo. Promedios anuales en azul.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
+     p <- p + labs(caption = "Datos INDEC. Datos del trimeste correspondiente a cada año señalados con un círculo. Promedios anuales en azul.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
     #p <- p + geom_segment(data = yearly_avg, aes(x = fecha, y = value), color="blue", size = 1)
   }
   else {
+     p <- p + labs(caption = "Datos INDEC. Datos del trimeste correspondiente a cada año señalados con un círculo.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
      p <- p + labs(caption = "Datos INDEC. Datos del trimeste correspondiente a cada año señalados con un círculo.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina")
   }
   p
