@@ -437,7 +437,7 @@ plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-
   # place slightly above the bottom of the panel
   y = ifelse(ymax > ymin, ymin + 0.02 * (ymax - ymin), ymin),
   # Nudge text slightly to the right but keep it within plotting limits
-  x = as.Date(hasta)+300,
+  x = as.Date(round(as.numeric(as.Date(hasta)) + (as.numeric(as.Date(hasta)) - as.numeric(as.Date(desde))) / 24), origin = "1970-01-01"),
       txtcolor = case_when(
         is.na(pct) ~ "black",
         pct > 0 ~ "darkgreen",
