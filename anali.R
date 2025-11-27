@@ -126,19 +126,90 @@ plot_evolution <- function(data, names, filename,quarters) {
   ggsave(file.path("plot", paste0(filename,"_",quarters,".png")), dpi = 300)
 }
 
-# Crear los gráficos
-for (quarter in c("Q2")) {
-  plot_evolution(data_long, c("Valor agregado bruto a precios básicos"), "Total", quarter)
-  plot_evolution(data_long, c("Agricultura, ganadería, caza y silvicultura", "Elaboración de productos alimenticios y bebidas", "Industria manufacturera (no alimentos)", "Comercio mayorista, minorista y reparaciones"), "grandes", quarter)
-  plot_evolution(data_long, c("Cultivos agrícolas", "Pesca", "Restaurantes, bares y cantinas", "Explotación de minas y canteras"), "suben", quarter)
-  plot_evolution(data_long, c("Electricidad, gas y agua", "Transporte, almacenamiento y comunicaciones", "Elaboración de productos alimenticios y bebidas", "Actividades inmobiliarias, empresariales y de alquiler"), "iguales", quarter)
-  plot_evolution(data_long, c("Fabricación de productos minerales no metálicos", "Fabricación de metales comunes", "Fabricación de maquinaria y equipo n.c.p.", "Fabricación de vehículos"), "bajan1", quarter)
-  plot_evolution(data_long, c("Fabricación de sustancias y productos químicos", "Construcción", "Comercio mayorista, minorista y reparaciones", "Fabricación de productos de caucho y plástico"), "bajan2", quarter)
-}
+ 
 
 
 data_long2 <- data_long %>%
     mutate(fecha = as.yearqtr(paste0(year, quarter)))
+
+# Compute sector comparisons and select sector groups to use for plotting based on latest data
+ref_year <- 2023L
+other_year <- max(data_long2$year, na.rm = TRUE)
+# tolerance for considering values 'similar' (relative difference)
+tolerance <- 0.02 # 2% relative tolerance
+
+# Diagnostics: check for duplicates in Q2
+dup_check <- data_long2 %>%
+  filter(quarter == "Q2", year %in% c(ref_year, other_year)) %>%
+  dplyr::count(year, quarter, name) %>%
+  dplyr::filter(n > 1)
+if (nrow(dup_check) > 0) {
+  message("Warning: duplicates found for Q2 (year,name) — pivot will aggregate with mean. Example rows:")
+  print(head(dup_check))
+}
+
+data_comparison <- data_long2 %>%
+  filter(quarter == "Q2", year %in% c(ref_year, other_year)) %>%
+  select(year, quarter, name, value) %>%
+  pivot_wider(names_from = year,
+              values_from = value,
+              names_prefix = "year_",
+              values_fn = mean,
+              values_fill = list(value = NA_real_)) %>%
+  # safe ratio: NA if denominator missing or zero
+  mutate(
+    !!paste0("ratio_", other_year, "_", ref_year) := ifelse(is.na(.data[[paste0("year_", ref_year)]]) | .data[[paste0("year_", ref_year)]] == 0,
+                                                                NA_real_,
+                                                                .data[[paste0("year_", other_year)]] / .data[[paste0("year_", ref_year)]]),
+    comparison = case_when(
+      is.na(.data[[paste0("year_", other_year)]]) | is.na(.data[[paste0("year_", ref_year)]]) ~ "missing",
+      .data[[paste0("year_", ref_year)]] == 0 ~ "missing",
+      abs(.data[[paste0("year_", other_year)]] - .data[[paste0("year_", ref_year)]]) / .data[[paste0("year_", ref_year)]] <= tolerance ~ "similar",
+      .data[[paste0("year_", other_year)]] > .data[[paste0("year_", ref_year)]] ~ "above",
+      TRUE ~ "below"
+    )
+  )
+
+# build lists of sectores that "crecen", "iguales" y "bajan"
+sectores_suben <- data_comparison %>%
+  filter(comparison == "above") %>%
+  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto|Cultivos agrícolas", name)) %>%
+  #get top 4 by ratio and threshold
+  filter(.data[[paste0("ratio_", other_year, "_", ref_year)]] > 1 & .data[[paste0("year_", other_year)]] > 20000) %>%
+  slice_max(order_by = .data[[paste0("ratio_", other_year, "_", ref_year)]], n = 4) %>%
+  pull(name)
+
+sectores_grandes <- data_comparison %>%
+  # Filter out anything containing "Valor agregado bruto" or "(no alimentos)"
+  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto|Cultivos agrícolas", name)) %>%
+  # Get top 4 by value in other_year
+  slice_max(order_by = .data[[paste0("year_", other_year)]], n = 4) %>%
+  pull(name)
+
+ratio_col <- paste0("ratio_", other_year, "_", ref_year)
+sectores_iguales <- data_comparison %>%
+  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto|Cultivos agrícolas", name)) %>%
+  filter(.data[[ratio_col]] >= 1 - tolerance & .data[[ratio_col]] <= 1 + tolerance) %>%
+  # Get top 4 by year in other_year
+  slice_max(order_by = .data[[paste0("year_", other_year)]], n = 4) %>%
+  pull(name)
+
+sectores_bajan1 <- data_comparison %>%
+  filter(comparison == "below") %>%
+  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto|Cultivos agrícolas", name)) %>%
+  # Get bottom 4 by ratio; ratio < 1 for 'below' and optionally filter by magnitude
+  filter(.data[[paste0("ratio_", other_year, "_", ref_year)]] < 1 & .data[[paste0("year_", other_year)]] > 15000) %>%
+  slice_min(order_by = .data[[paste0("ratio_", other_year, "_", ref_year)]], n = 4) %>%
+  pull(name)
+
+sectores_bajan2 <- data_comparison %>%
+  filter(comparison == "below") %>%
+  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto|Cultivos agrícolas", name)) %>%
+  # Get bottom 4 by ratio; ratio < 1 for 'below' and optionally filter by magnitude
+  filter(.data[[paste0("ratio_", other_year, "_", ref_year)]] < 1 & .data[[paste0("year_", other_year)]] <= 15000 & .data[[paste0("year_", other_year)]] > 5000) %>%
+  slice_min(order_by = .data[[paste0("ratio_", other_year, "_", ref_year)]], n = 4) %>%
+  pull(name)
+
 
 
 plot_evolutionall <- function(data, names, filename, yearly = FALSE, lastq = NULL) {
@@ -219,86 +290,7 @@ plot_evolutionall <- function(data, names, filename, yearly = FALSE, lastq = NUL
   ggsave(file.path("plot", paste0(filename, ".png")), plot = p, dpi = 300)
 }
 
-# Let's write code to identify which sectors are above 2023 levels, which are similar, and which are below
-# for Q2 of the reference year (2023) vs the latest year available (dynamic). Pivot duplicates
-# are summarised with mean to avoid list-cols.
-
-ref_year <- 2023L
-other_year <- max(data_long2$year, na.rm = TRUE)
-# tolerance for considering values 'similar' (relative difference)
-tolerance <- 0.05 # 5% relative tolerance
-
-# Diagnostics: check for duplicates
-dup_check <- data_long2 %>%
-  filter(quarter == "Q2", year %in% c(ref_year, other_year)) %>%
-  dplyr::count(year, quarter, name) %>%
-  dplyr::filter(n > 1)
-if (nrow(dup_check) > 0) {
-  message("Warning: duplicates found for Q2 (year,name) — pivot will aggregate with mean. Example rows:")
-  print(head(dup_check))
-}
-
-data_comparison <- data_long2 %>%
-  filter(quarter == "Q2", year %in% c(ref_year, other_year)) %>%
-  select(year, quarter, name, value) %>%
-  pivot_wider(names_from = year,
-              values_from = value,
-              names_prefix = "year_",
-              values_fn = mean,
-              values_fill = list(value = NA_real_)) %>%
-  # safe ratio: NA if denominator missing or zero
-  mutate(
-    !!paste0("ratio_", other_year, "_", ref_year) := ifelse(is.na(.data[[paste0("year_", ref_year)]]) | .data[[paste0("year_", ref_year)]] == 0,
-                                                                NA_real_,
-                                                                .data[[paste0("year_", other_year)]] / .data[[paste0("year_", ref_year)]]),
-    comparison = case_when(
-      is.na(.data[[paste0("year_", other_year)]]) | is.na(.data[[paste0("year_", ref_year)]]) ~ "missing",
-      .data[[paste0("year_", ref_year)]] == 0 ~ "missing",
-      abs(.data[[paste0("year_", other_year)]] - .data[[paste0("year_", ref_year)]]) / .data[[paste0("year_", ref_year)]] <= tolerance ~ "similar",
-      .data[[paste0("year_", other_year)]] > .data[[paste0("year_", ref_year)]] ~ "above",
-      TRUE ~ "below"
-    )
-  )
-
-#lets build list of sectores that "crecen", "iguales" y "bajan"
-sectores_suben <- data_comparison %>%
-  filter(comparison == "above") %>%
-  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto", name)) %>%
-  #get top 4 by ratio and year_2025 > 20000
-  filter(!!sym(paste0("ratio_", other_year, "_", ref_year)) > 1 & .data[[paste0("year_", other_year)]] > 20000) %>%
-  top_n(4, !!sym(paste0("ratio_", other_year, "_", ref_year))) %>%
-  pull(name)
-
-sectores_grandes <- data_comparison %>%
-# Filter out anything containing "Valor agregado bruto" or "(no alimentos)"
-  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto", name)) %>%
-  # Get top 4 by year_2025
-  top_n(4, !!sym(paste0("year_", other_year))) %>%
-  pull(name)
-
-ratio_col <- paste0("ratio_", other_year, "_", ref_year)
-sectores_iguales <- data_comparison %>%
-  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto", name)) %>%
-  filter(.data[[ratio_col]] >= 1 - tolerance & .data[[ratio_col]] <= 1 + tolerance) %>%
-  # Get top 4 by year_2025
-  top_n(4, !!sym(paste0("year_", other_year))) %>%
-  pull(name)
-
-sectores_bajan1 <- data_comparison %>%
-  filter(comparison == "below") %>%
-  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto", name)) %>%
-  # Get bottom 4 by ratio; ratio < 1 for 'below' and optionally filter by magnitude
-  filter(.data[[paste0("ratio_", other_year, "_", ref_year)]] < 1 & .data[[paste0("year_", other_year)]] > 15000) %>%
-  top_n(-4, .data[[paste0("ratio_", other_year, "_", ref_year)]]) %>%
-  pull(name)
-
-sectores_bajan2 <- data_comparison %>%
-  filter(comparison == "below") %>%
-  filter(!grepl("Valor agregado bruto|\\(no alimentos\\)|Petróleo|Resto", name)) %>%
-  # Get bottom 4 by ratio; ratio < 1 for 'below' and optionally filter by magnitude
-  filter(.data[[paste0("ratio_", other_year, "_", ref_year)]] < 1 & .data[[paste0("year_", other_year)]] <= 15000 & .data[[paste0("year_", other_year)]] > 5000) %>%
-  top_n(-4, .data[[paste0("ratio_", other_year, "_", ref_year)]]) %>%
-  pull(name)
+ 
 
 plot_evolutionall(data_long2, names = c("Valor agregado bruto a precios básicos"), "Total",yearly=TRUE)
 plot_evolutionall(data_long2, names = sectores_grandes, "grandes",yearly=TRUE)
@@ -306,6 +298,16 @@ plot_evolutionall(data_long2, names = sectores_suben, "suben",yearly=TRUE)
 plot_evolutionall(data_long2, names = sectores_iguales, "iguales",yearly=TRUE)
 plot_evolutionall(data_long2, names = sectores_bajan1, "bajan1",yearly=TRUE)
 plot_evolutionall(data_long2, names = sectores_bajan2, "bajan2",yearly=TRUE)
+
+# Create the Q2 plots using the same sectors lists (fall back to defaults if empty)
+for (quarter in c("Q2")) {
+  plot_evolution(data_long, c("Valor agregado bruto a precios básicos"), "Total", quarter)
+  plot_evolution(data_long, if (!is.null(sectores_grandes) && length(sectores_grandes) > 0) sectores_grandes else c("Agricultura, ganadería, caza y silvicultura", "Elaboración de productos alimenticios y bebidas", "Industria manufacturera (no alimentos)", "Comercio mayorista, minorista y reparaciones"), "grandes", quarter)
+  plot_evolution(data_long, if (!is.null(sectores_suben) && length(sectores_suben) > 0) sectores_suben else c("Cultivos agrícolas", "Pesca", "Restaurantes, bares y cantinas", "Explotación de minas y canteras"), "suben", quarter)
+  plot_evolution(data_long, if (!is.null(sectores_iguales) && length(sectores_iguales) > 0) sectores_iguales else c("Electricidad, gas y agua", "Transporte, almacenamiento y comunicaciones", "Elaboración de productos alimenticios y bebidas", "Actividades inmobiliarias, empresariales y de alquiler"), "iguales", quarter)
+  plot_evolution(data_long, if (!is.null(sectores_bajan1) && length(sectores_bajan1) > 0) sectores_bajan1 else c("Fabricación de productos minerales no metálicos", "Fabricación de metales comunes", "Fabricación de maquinaria y equipo n.c.p.", "Fabricación de vehículos"),                  "bajan1", quarter)
+  plot_evolution(data_long, if (!is.null(sectores_bajan2) && length(sectores_bajan2) > 0) sectores_bajan2 else c("Fabricación de sustancias y productos químicos", "Construcción", "Comercio mayorista, minorista y reparaciones", "Fabricación de productos de caucho y plástico"), "bajan2", quarter)
+}
 
 
 #Ahora analizamos EMAE
@@ -411,6 +413,38 @@ plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-
     adjusted_data <- data %>%
       filter(name %in% names)
   }
+
+  # Prepare per-facet labels: percent change between 2023 and latest year (mean values)
+  # Compare the last available month of the latest year with the same month in the previous year
+  other_year_em <- adjusted_data %>% pull(year) %>% max(na.rm = TRUE)
+  other_month_em <- adjusted_data %>% filter(year == other_year_em) %>% pull(month) %>% max(na.rm = TRUE)
+  prev_year_em <- other_year_em - 1
+  label_df <- adjusted_data %>%
+    group_by(name) %>%
+    summarize(
+      # Get the value for the same month in the previous year and for the last month of the latest year
+      val_prev = mean(value[year == prev_year_em & month == other_month_em], na.rm = TRUE),
+      val_other = mean(value[year == other_year_em & month == other_month_em], na.rm = TRUE),
+      x = max(fecha, na.rm = TRUE),
+      ymin = min(value, na.rm = TRUE),
+      ymax = max(value, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+  pct = ifelse(is.na(val_prev) | val_prev == 0 | is.na(val_other), NA_integer_,
+       round((val_other / val_prev - 1) * 100)),
+  label = ifelse(is.na(pct), "n/a", paste0("i.a. ", ifelse(pct > 0, "+", ""), pct, "%")),
+  # place slightly above the bottom of the panel
+  y = ifelse(ymax > ymin, ymin + 0.02 * (ymax - ymin), ymin),
+  # Nudge text slightly to the right but keep it within plotting limits
+  x = as.Date(hasta)+300,
+      txtcolor = case_when(
+        is.na(pct) ~ "black",
+        pct > 0 ~ "darkgreen",
+        pct < 0 ~ "red",
+        TRUE ~ "black"
+      )
+    )
   
   # Rest of plotting code using adjusted_data
   plott<-adjusted_data %>%
@@ -418,23 +452,26 @@ plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-
     geom_line(size=0.8) +
     ylab("EMAE base 100 = 2023") +
     xlab("Año") +
-    ggtitle(paste0("Estimador Mensual de Actividad Económica")) +
+    ggtitle(paste0("Estimador Mensual de Actividad Económica (EMAE)")) +
     facet_wrap(~name, labeller=ggplot2::label_wrap_gen(width=30), scales = "free_y", ncol = 2) +
     theme_light() +
     # Etiquetar cada tercer trimestre con un punto
     geom_point(data = adjusted_data %>%  filter(name %in% names) %>% filter(month == max_mes), aes(x = fecha, y = value,fill=name),color="black",pch=21, size = 2) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = comma, minor_breaks = NULL) +
     #coord_cartesian(ylim = c(0, NA),xlim = c(desde, hasta)) +
-    scale_x_date(minor_breaks = NULL,date_breaks = "1 year", date_labels = "%Y", 
-                 limits = as.Date(c(desde, hasta))) +
+    scale_x_date(minor_breaks = NULL,date_breaks = "1 year", date_labels = "%Y") +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none",
           strip.text = element_text(size = 8, face = "bold"))+
+    coord_cartesian(xlim = c(desde, hasta)) +
     labs(subtitle= paste0("Base promedio 2023=100 por actividad económica",
                          if(deseasonalize) "\n(Series desestacionalizadas)" else ""))
-  plott <- plott + labs(caption = paste0("Datos INDEC. Cada mes de ", 
-                                        num_2_month(max_mes), 
-                                        " indicado como un punto.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina"))  
+  plott <- plott + labs(caption = paste0("Datos INDEC. Cada mes de ", num_2_month(max_mes), " indicado como un punto.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina"))
+  # Add percent-change labels to each facet (bottom-right) using three small layers
+  plott <- plott +
+    geom_text(data = label_df %>% filter(!is.na(pct) & pct > 0), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust =1, vjust = 0, size = 4, color = "darkgreen", show.legend = FALSE) +
+    geom_text(data = label_df %>% filter(!is.na(pct) & pct < 0), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust =1, vjust = 0, size = 4, color = "red", show.legend = FALSE) +
+    geom_text(data = label_df %>% filter(is.na(pct)), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust = 0, vjust =1, size = 4, color = "black", show.legend = FALSE)
   ggsave(file.path("plot", paste0(filename, if(deseasonalize) "_desest" else "", ".png")), dpi = 300)
 }
 
@@ -454,7 +491,7 @@ data3_long <- data3_long %>%
   select(-avg_2023)
 
 #PANORAMA GENERAL
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "J - Intermediación financiera"), "general_emae",desde = as.Date("2015-01-01"),hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "J - Intermediación financiera"), "general_emae",hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,hasta=last_m)
 #GANAN "H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"

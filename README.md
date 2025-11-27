@@ -27,31 +27,29 @@ Ejemplos de gráficos EMAE están disponibles en el mismo `plot/`:
 Todos los PNG manejados por este repo ahora están en la carpeta `plot/`.
 
 
-Ahora, miramos los rubros más significativos de la economía argentina, indicando los terceros trimestres con un círculo en cada rubro. El promedio anual se indica como una línea azul para cada año.
+Ahora, miramos los rubros más significativos de la economía argentina, indicando el trimestre de cada año comparable con el último dato disponible con un círculo en cada rubro. El promedio anual se indica como una línea azul para cada año.
 
 ![grandes](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/grandes.png)
 
-Aquí se puede ver que hay rubros donde la actividad económica es mayor a la de 2023 como el campo y la elaboración de alimentos y bebidas, pero otros dos rubros de enorme peso en la economía argentina como el comercio y el resto de la industria manufacturera crecieron en 2025 respecto a 2024 pero aún no recuperan los niveles de actividad de 2023.
+Aquí se puede ver que hay rubros donde la actividad económica es mayor a la de 2023 como el campo y la actividad inmobiliaria y de alquiler, pero otros dos rubros de enorme peso en la economía argentina como el comercio y la industria manufacturera crecieron en 2025 respecto a 2024 pero sin recuperar los niveles de actividad de 2023.
 
 Esto puede observarse en un gráfico más simplificado donde sólo se comparan los valores de estas mismas industrias para el 2ndo trimestre:
 
 ![grandes_Q2](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/grandes_Q2.png)
 
-Analizando más en detalle los rubros donde la actividad supera los niveles de 2023 y 2024, podemos encontrar a la minas y canteras, restaurantes y bares, .
+Analizando más en detalle los rubros donde la actividad en 2025 supera los niveles de 2023 y 2024, podemos encontrar a las minas y canteras, agricultura, intermediación financiera y transporte.
 ![suben](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/suben.png)
 
-Algunos rubros donde la actividad rebotó respecto al 2do trimestre de 2024, y están en niveles similares a los de 2023 serían Actividades Inmobiliarias, Electricidad, gas y agua, Elaboración de alimentos y Transporte y Comunicaciones.
-![iguales](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/iguales.png)
 
-Por otro lado, hay grandes rubros donde se observa alguna recuperación en comparación con el 2do trimestre de 2024, pero donde la actividad en el 3er trimestre de 2024 sigue siendo bajísima, en algunos casos sólo superando el nivel de actividad de la pandemia (2020).
-Esto ocurre con la construcción, y en menor medida, con el comercio, la fabricación de cauchos y plásticos, y la industria química.
-![bajan2](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/bajan2.png)
+Por otro lado, hay grandes rubros donde se observa alguna recuperación en comparación con 2024, pero la actividad sigue siendo muy inferior a la de 2023. Esto ocurre con el comercio, la construcción, la industria manufacturera en general, y en particular la industria química.
+![bajan2](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/bajan1.png)
 
-Por otro lado, el grueso de la industria y manufactura no-alimentos se recupera un poco en el 3er trimestre respecto al 2do de 2024, pero sigue en niveles bajísimos, también cercanos a los de la pandemia.
-Aquí podemos observar algunos rubros manufactureros en esa situación, Fabricación de maquinaria, de metales comunes, de productos minerales no metálicos y fabricación de vehículos.
-![bajan1](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/bajan1.png)
+Otros rubros que siguen sin recuperar los niveles de 2023 son Fabricación de maquinaria, de metales comunes, fabricación de vehículos y servicios culturales y deportivos.
+![bajan1](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/bajan2.png)
 
-En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles similares a los de 2020-2021, como la construcción y la industria no-alimenticia. Mientras tanto, el comercio mayorista y minorista se recuperó levemente entre el secundo y el tercer trimestre de 2024, pero aún está lejos de recuperar los niveles de 2023.
+En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles muy por debajo de los de 2023, como el comercio, la construcción y la industria, los cuales son los sectores que mayor empleo generan en la economía argentina. Mientras tanto, los sectores donde sí aumentó la actividad por encima de los niveles de 2023 son Intermediación financiera, impuestos netos de subsidios, hoteles y restaurantes, y minería.
+
+![general_emae](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/2015-2025_general_emae.png)
 
 Cómo reproducir
 ----------------
