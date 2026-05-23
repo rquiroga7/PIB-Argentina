@@ -12,11 +12,12 @@ if (!dir.exists("plot")) {
   dir.create("plot")
 }
 
-# Leer el archivo CSV
-data <- read_csv("sh_VBP_VAB_12_24.csv",col_names = FALSE, skip=2)
-
-#Leer la pestaña 4, "Cuadro 3" del xls
-data2 <- read_excel("sh_VBP_VAB_09_25.xls", sheet = 4, skip = 5, col_names = FALSE)
+# Leer archivo de VBP/VAB (actualizado hasta 03/2026)
+# Usamos el archivo xls más reciente que contiene los cuadros
+data_raw <- read_excel("sh_VBP_VAB_03_26.xls", sheet = 4, skip = 5, col_names = FALSE)
+# Mantener compatibilidad con el nombre usado anteriormente (data y data2)
+data <- data_raw
+data2 <- data_raw
 
 # Identificar las columnas a mantener: columna 1 y aquellas que no son múltiplos de 6 o 6 + 1
 columns_to_keep <- c(1, which(!(seq_along(data) %% 6 %in% c(0, 1))))
@@ -40,12 +41,15 @@ data2[is.na(data2)] <- ""
 
 
 # Nuevo dataframe combinando datos con años y trimestres
-# Reemplazar la fila 2 con la fila de años, comenzando en 2004, repitiendo 4 veces cada uno, excepto para 2024
-#years <- c("",rep(2004:2023, each = 4),2024,2024,2024)
-years <- c("",rep(2004:2024, each = 4),rep(2025, each=2))
-#quarters<-c("",rep(c("Q1","Q2","Q3","Q4"),times=20),c("Q1","Q2","Q3"))
-quarters<-c("",rep(c("Q1","Q2","Q3","Q4"),times=21),"Q1","Q2")
-data2 <- data.frame(rbind(years,quarters,data2))
+# Construir vectores de años y trimestres a partir del número de periodos
+num_periods <- ncol(data2) - 1
+start_year <- 2004
+years_seq <- rep(start_year:(start_year + floor((num_periods - 1) / 4)), each = 4)
+years_seq <- years_seq[1:num_periods]
+quarters_seq <- rep(c("Q1", "Q2", "Q3", "Q4"), length.out = num_periods)
+years <- c("", years_seq)
+quarters <- c("", quarters_seq)
+data2 <- data.frame(rbind(years, quarters, data2))
 
 
 # Extraer información de años y trimestres
@@ -107,6 +111,10 @@ plot_evolution <- function(data, names, filename,quarters) {
   } else {
     stripsize = 8
   }
+  # determine year bounds from the provided data
+  min_year <- min(data$year, na.rm = TRUE)
+  max_year <- max(data$year, na.rm = TRUE)
+
   data %>%
     filter(name %in% names) %>%
     filter(quarter %in% quarters) %>%
@@ -114,11 +122,11 @@ plot_evolution <- function(data, names, filename,quarters) {
     geom_borderline(size=1.2) +
     ylab("Valor Agregado Bruto a Precios Básicos") +
     xlab("Año") +
-    ggtitle(paste0("VAB a Precios Básicos por sector económico")) +
+    ggtitle(paste0("VAB a Precios Básicos por sector económico (", min_year, "-", max_year, ")")) +
     facet_wrap(~name, labeller=ggplot2::label_wrap_gen(width=30), scales = "free_y", ncol = 2) +
     theme_light() +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = comma, minor_breaks = NULL) +
-    scale_x_continuous(expand = c(0, 0.5), minor_breaks = NULL,breaks=seq(2004,2025,1)) +
+    scale_x_continuous(expand = c(0, 0.5), minor_breaks = NULL, breaks = seq(min_year, max_year, 1)) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none",
           strip.text = element_text(size = stripsize, face = "bold"))+
@@ -234,14 +242,16 @@ plot_evolutionall <- function(data, names, filename, yearly = FALSE, lastq = NUL
     geom_line(size = 1.2) +
     ylab("Valor Agregado Bruto a Precios Básicos") +
     xlab("Año") +
-    ggtitle(paste0(paste0("VAB a Precios Básicos por sector económico para cada sector económico para cada trimestre 2004-2024"))) +
+    # use the data's year range in the title
+    ggtitle(paste0("VAB a Precios Básicos por sector económico por trimestre ", min(data$year, na.rm = TRUE), "-", max(data$year, na.rm = TRUE))) +
     facet_wrap(~name, labeller=ggplot2::label_wrap_gen(width=30), scales = scalev, ncol = 2) +
     theme_light() +
     # Etiquetar cada tercer trimestre con un punto
   geom_point(data = data %>%  filter(name %in% names) %>% filter(quarter == lastq), aes(x = fecha, y = value,fill=name),color="black",pch=21, size = 2) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = comma) +
-    #zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.50, 2024.50, 1)) +
-    zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.5), minor_breaks = NULL, breaks = seq(2004.75, 2025.75, 1)) +
+    # build yearqtr breaks dynamically
+    zoo::scale_x_yearqtr(format = '%Y-T%q', expand = c(0, 0.5), minor_breaks = NULL,
+               breaks = seq(min(data$year, na.rm = TRUE) + 0.75, max(data$year, na.rm = TRUE) + 0.75, 1)) +
     #zoo::scale_x_yearqtr(format = '%Y-T%q',expand = c(0, 0.22), minor_breaks = NULL, breaks = seq(2004.50, 2024.50, 1)) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
           legend.position = "none", 
