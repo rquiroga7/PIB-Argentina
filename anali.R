@@ -500,7 +500,108 @@ data3_long <- data3_long %>%
   ungroup() %>%
   select(-avg_2023)
 
-#PANORAMA GENERAL
+
+
+# --- Compute VAB-based weights for EMAE categories using 2023 VAB shares ---
+# Exclude VAB 'total' rows so weights reflect sector shares of the economy
+# DOES NOT WORK
+vab_weights_2023 <- data_long %>%
+  filter(year == 2023) %>%
+  filter(!grepl("Valor agregado bruto a precios básicos", name)) %>%
+  group_by(name) %>%
+  summarize(vab_sum = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  mutate(weight = vab_sum / sum(vab_sum))
+
+# Map EMAE series to VAB sector names (strip prefix like "J - ")
+emae_to_vab <- function(x) {
+  stringr::str_replace(x, "^[A-Z] -\\s*", "")
+}
+
+emae_weights <- data3_long %>%
+  distinct(name) %>%
+  mutate(vab_name = emae_to_vab(name)) %>%
+  left_join(vab_weights_2023 %>% select(name, weight), by = c("vab_name" = "name")) %>%
+  mutate(weight = ifelse(is.na(weight), 0, weight),
+         exclude = vab_name %in% c("Intermediación financiera", "Impuestos netos de subsidios"))
+
+message("Sum of weights: ", sum(emae_weights$weight, na.rm = TRUE))
+message("Top 5 weights: ", paste(head(sort(emae_weights$weight, decreasing = TRUE), 5), collapse = ", "))
+message("Sample weights: ", paste(head(emae_weights$weight, 10), collapse = ", "))
+
+# Compute the weighted EMAE total (monthly) and a version excluding taxes & finance
+emae_weighted_totals <- data3_long %>%
+  left_join(emae_weights %>% select(name, weight, exclude), by = "name") %>%
+  group_by(year, month, fecha) %>%
+  summarize(
+    total_weighted = sum(value * weight, na.rm = TRUE),
+    total_no_tax_inter = sum(value * weight * ifelse(exclude, 0, 1), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+message("Weighted total stats: min ", min(emae_weighted_totals$total_weighted, na.rm = TRUE), " max ", max(emae_weighted_totals$total_weighted, na.rm = TRUE), " mean ", mean(emae_weighted_totals$total_weighted, na.rm = TRUE))
+message("Sample weighted totals: ", paste(head(emae_weighted_totals$total_weighted, 10), collapse = ", "))
+message("No tax inter stats: min ", min(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE), " max ", max(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE), " mean ", mean(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE))
+message("Sample no tax inter: ", paste(head(emae_weighted_totals$total_no_tax_inter, 10), collapse = ", "))
+
+# Normalize the two aggregated series so each has average 2023 == 100
+norm_factors <- emae_weighted_totals %>%
+  filter(year == 2023) %>%
+  summarize(
+    mean_total = mean(total_weighted, na.rm = TRUE),
+    mean_no_tax_inter = mean(total_no_tax_inter, na.rm = TRUE)
+  )
+
+message("Number of rows in 2023: ", nrow(emae_weighted_totals %>% filter(year == 2023)))
+message("mean_total: ", norm_factors$mean_total)
+message("mean_no_tax_inter: ", norm_factors$mean_no_tax_inter)
+
+factor_total <- ifelse(is.na(norm_factors$mean_total) | norm_factors$mean_total == 0, NA_real_, 100 / norm_factors$mean_total)
+factor_no_tax_inter <- ifelse(is.na(norm_factors$mean_no_tax_inter) | norm_factors$mean_no_tax_inter == 0, NA_real_, 100 / norm_factors$mean_no_tax_inter)
+
+emae_weighted_totals <- emae_weighted_totals %>%
+  mutate(
+    total_weighted = ifelse(is.na(factor_total), total_weighted, total_weighted * factor_total),
+    total_no_tax_inter = ifelse(is.na(factor_no_tax_inter), total_no_tax_inter, total_no_tax_inter * factor_no_tax_inter)
+  )
+
+message("Normalized total stats: min ", min(emae_weighted_totals$total_weighted, na.rm = TRUE), " max ", max(emae_weighted_totals$total_weighted, na.rm = TRUE), " mean ", mean(emae_weighted_totals$total_weighted, na.rm = TRUE))
+message("Normalized no tax inter stats: min ", min(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE), " max ", max(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE), " mean ", mean(emae_weighted_totals$total_no_tax_inter, na.rm = TRUE))
+message("Sample normalized totals: ", paste(head(emae_weighted_totals$total_weighted, 10), collapse = ", "))
+message("Sample normalized no tax inter: ", paste(head(emae_weighted_totals$total_no_tax_inter, 10), collapse = ", "))
+
+# Plot EMAE weighted totals (with and without the two sectors) for 2004-2025
+p_total_emae_comp_2004 <- emae_weighted_totals %>%
+  ggplot(aes(x = fecha)) +
+  geom_line(aes(y = total_weighted, color = "Total EMAE"), size = 1) +
+  geom_line(aes(y = total_no_tax_inter, color = "Total EMAE (sin impuestos e intermediación)"), size = 1) +
+  scale_color_manual(values = c("Total EMAE" = "black", "Total EMAE (sin impuestos e intermediación)" = "red")) +
+  ylab("EMAE base 100 = 2023") +
+  xlab("Año") +
+  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera (ponderado por VAB 2023)") +
+  theme_light() +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = scales::comma) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2004-01-01", "2025-12-31"))) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), legend.position = "bottom")
+
+ggsave(file.path("plot", "Total_EMAE_compare_2004_2025.png"), plot = p_total_emae_comp_2004, dpi = 300)
+
+# Plot for 2015-2025
+p_total_emae_comp_2015 <- emae_weighted_totals %>%
+  ggplot(aes(x = fecha)) +
+  geom_line(aes(y = total_weighted, color = "Total EMAE"), size = 1) +
+  geom_line(aes(y = total_no_tax_inter, color = "Total EMAE (sin impuestos e intermediación)"), size = 1) +
+  scale_color_manual(values = c("Total EMAE" = "black", "Total EMAE (sin impuestos e intermediación)" = "red")) +
+  ylab("EMAE base 100 = 2023") +
+  xlab("Año") +
+  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera (ponderado por VAB 2023)") +
+  theme_light() +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = scales::comma) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2015-01-01", "2025-12-31"))) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), legend.position = "bottom")
+
+ggsave(file.path("plot", "Total_EMAE_compare_2015_2025.png"), plot = p_total_emae_comp_2015, dpi = 300)
+
+
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "J - Intermediación financiera"), "general_emae",hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,hasta=last_m)
