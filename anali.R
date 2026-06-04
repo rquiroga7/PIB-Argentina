@@ -36,6 +36,10 @@ data <- data[-c(1,3),]
 data2 <- data2[-c(2),]
 
 # Reemplazar valores NA con ""
+# Convert all columns to character first to handle NA-only columns that
+# readxl may infer as logical
+data <- data %>% mutate(across(everything(), as.character))
+data2 <- data2 %>% mutate(across(everything(), as.character))
 data[is.na(data)] <- ""
 data2[is.na(data2)] <- ""
 
@@ -391,31 +395,69 @@ data3_long <- data3_long %>%
     mutate(fecha = as.Date(paste0(year, "-", month, "-01")),
            value = as.numeric(value))
 
-deseasonalize_ts <- function(data, frequency=12) {
-  # Convert to time series object
-  ts_data <- ts(data$value, frequency=frequency)
-  # Decompose
-  decomp <- decompose(ts_data, type="multiplicative")
-  # Return seasonally adjusted data
-  return(decomp$x / decomp$seasonal)
+deseasonalize_ts_seat <- function(data, dow_mat, frequency = 12,
+                                  transform = "auto",
+                                  seats_noadmiss = "yes",
+                                  forecast_horizon = 36) {
+  data <- data %>% arrange(year, month)
+  start_y <- data$year[1]
+  start_m <- data$month[1]
+  n <- nrow(data)
+
+  ts_data <- ts(data$value, start = c(start_y, start_m), frequency = frequency)
+
+  xreg_df <- data %>%
+    dplyr::select(year, month) %>%
+    left_join(dow_mat, by = c("year", "month")) %>%
+    dplyr::select(-year, -month)
+
+  if (any(is.na(xreg_df))) {
+    stop("dow_mat has missing values for some (year, month) in `data`")
+  }
+
+  # X-13 needs xreg to extend past the series end for the default 3-year
+  # forecast horizon. Repeat the last DOW row as a naive hold-forward.
+  n_needed <- n + forecast_horizon
+  if (nrow(xreg_df) < n_needed) {
+    n_extra <- n_needed - nrow(xreg_df)
+    last_row <- xreg_df[nrow(xreg_df), , drop = FALSE]
+    extras <- last_row[rep.int(1, n_extra), , drop = FALSE]
+    xreg_df <- rbind(xreg_df, extras)
+  }
+
+  xreg_ts <- ts(as.matrix(xreg_df),
+                start = c(start_y, start_m),
+                frequency = frequency)
+
+  fit <- seas(x = ts_data, xreg = xreg_ts,
+              transform.function = transform,
+              seats.noadmiss = seats_noadmiss,
+              regression.aictest = NULL)
+  as.numeric(final(fit))
 }
 
-plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-01"), 
-                                hasta=as.Date("2025-03-31"), deseasonalize=FALSE) {
-  max_mes = data3_long %>% 
-    filter(year == max(year)) %>% 
-    filter(month == max(month)) %>% 
-    select(month) %>% 
-    unique() %>% 
+plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-01"),
+                                hasta=as.Date("2025-03-31"), deseasonalize=FALSE,
+                                save_dir="plot", dow_mat=NULL) {
+  max_mes = data3_long %>%
+    filter(year == max(year)) %>%
+    filter(month == max(month)) %>%
+    select(month) %>%
+    unique() %>%
     pull(month)
-    
+
   if(deseasonalize) {
-    # Deseasonalize each series
+    if (is.null(dow_mat)) {
+      stop("deseasonalize=TRUE requires `dow_mat` (5-dow trading-day matrix)")
+    }
+    # Deseasonalize each series with X-13ARIMA-SEATS, passing the DOW dummies
+    # as external regressors so the trading-day effect is estimated jointly
+    # with the seasonal/irregular decomposition.
     adjusted_data <- data %>%
       filter(name %in% names) %>%
       group_by(name) %>%
       group_modify(~{
-        adj_values <- deseasonalize_ts(.)
+        adj_values <- deseasonalize_ts_seat(., dow_mat = dow_mat)
         mutate(., value = adj_values)
       }) %>%
       ungroup()
@@ -475,14 +517,14 @@ plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-
           strip.text = element_text(size = 8, face = "bold"))+
     coord_cartesian(xlim = c(desde, hasta)) +
     labs(subtitle= paste0("Base promedio 2023=100 por actividad económica",
-                         if(deseasonalize) "\n(Series desestacionalizadas)" else ""))
+                         if(deseasonalize) "\n(Series desestacionalizadas con X-13ARIMA-SEATS, regresor de días hábiles)" else ""))
   plott <- plott + labs(caption = paste0("Datos INDEC. Cada mes de ", num_2_month(max_mes), " indicado como un punto.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina"))
   # Add percent-change labels to each facet (bottom-right) using three small layers
   plott <- plott +
     geom_text(data = label_df %>% filter(!is.na(pct) & pct > 0), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust =1, vjust = 0, size = 4, color = "darkgreen", show.legend = FALSE) +
     geom_text(data = label_df %>% filter(!is.na(pct) & pct < 0), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust =1, vjust = 0, size = 4, color = "red", show.legend = FALSE) +
     geom_text(data = label_df %>% filter(is.na(pct)), aes(x = x, y = y, label = label), inherit.aes = FALSE, hjust = 0, vjust =1, size = 4, color = "black", show.legend = FALSE)
-  ggsave(file.path("plot", paste0(filename, if(deseasonalize) "_desest" else "", ".png")), dpi = 300)
+  ggsave(file.path(save_dir, paste0(filename, if(deseasonalize) "_desest" else "", ".png")), dpi = 300)
 }
 
 last_m <- data3_long %>%
@@ -500,7 +542,49 @@ data3_long <- data3_long %>%
   ungroup() %>%
   select(-avg_2023)
 
+# --- Day-of-week (effective trading-day) matrix from BCRA TCR series ---
+# We build a complete daily calendar over the BCRA TCR date range and emit
+# one row per (year, month) with:
+#   * 6 day-of-week dummies: mon..sat (total counts, Sunday is the reference).
+#     Saturday is included even though BCRA never publishes on Saturdays,
+#     because Saturday carries activity for many sectors (retail, restaurants,
+#     services) and the regression can estimate its own positive effect.
+#   * `holidays`: count of weekdays (Mon..Fri) absent from com3500.xls, i.e.
+#     Argentine national holidays / bridge days on which the BCRA did not
+#     publish. This is a single coefficient applied uniformly across weekdays;
+#     it absorbs the activity loss when a weekday becomes non-workable.
+# The dummies use total counts (not business-day counts) so that the holidays
+# regressor can carry the day-specific loss; otherwise reducing the Mon count
+# would conflate the "Monday effect" with the "holiday effect" on a Monday.
+dow_raw <- read_excel("com3500.xls", sheet = 1, skip = 2, col_names = FALSE)
+names(dow_raw) <- c("serial", "tcr", "na", "end_month")
+dow_raw <- dow_raw %>%
+  mutate(fecha = as.Date(suppressWarnings(as.numeric(serial)),
+                         origin = "1899-12-30")) %>%
+  filter(!is.na(fecha))
 
+all_dates <- seq.Date(min(dow_raw$fecha), max(dow_raw$fecha), by = "day")
+calendar <- tibble(
+  fecha  = all_dates,
+  year   = as.integer(format(all_dates, "%Y")),
+  month  = as.integer(format(all_dates, "%m")),
+  wday   = as.integer(format(all_dates, "%u"))  # 1=Mon .. 7=Sun
+)
+
+dow_mat <- calendar %>%
+  filter(wday <= 6) %>%
+  count(year, month, wday) %>%
+  pivot_wider(names_from = wday, values_from = n, values_fill = 0,
+              names_prefix = "d") %>%
+  rename(mon = d1, tue = d2, wed = d3, thu = d4, fri = d5, sat = d6) %>%
+  left_join(
+    calendar %>%
+      filter(wday <= 5, !fecha %in% dow_raw$fecha) %>%
+      count(year, month, name = "holidays"),
+    by = c("year", "month")
+  ) %>%
+  mutate(holidays = replace_na(holidays, 0)) %>%
+  arrange(year, month)
 
 # --- Compute VAB-based weights for EMAE categories using 2023 VAB shares ---
 # Exclude VAB 'total' rows so weights reflect sector shares of the economy
@@ -604,12 +688,12 @@ ggsave(file.path("plot", "Total_EMAE_compare_2015_2025.png"), plot = p_total_ema
 
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "J - Intermediación financiera"), "general_emae",hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
 #GANAN "H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"
 plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "suben_emae",hasta=last_m)
 plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "2015-2025_suben_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "2015-2025_suben_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,hasta=last_m)
+plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "2015-2025_suben_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
 #PIERDEN "D - Industria manufacturera", "F - Construcción", "H - Hoteles y restaurantes", "O - Otras actividades de servicios comunitarios, sociales y personales"
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "bajan_emae",hasta=last_m)
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "2015-2025_bajan_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "2015-2025_bajan_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "2015-2025_bajan_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
