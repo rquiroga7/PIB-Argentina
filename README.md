@@ -16,12 +16,16 @@ Novedades y dónde encontrar los gráficos
 
 Se movieron los PNG generados a la carpeta `plot/`. Si ejecutas `anali.R` se generarán los mismos gráficos dentro de `plot/`.
 
-Además, se incluyó el análisis del EMAE (Estimador Mensual de Actividad Económica) junto al VAB trimestral. Las series EMAE se re-basan a promedio 2023 = 100 y hay una opción para desestacionalizar las series con **X-13ARIMA-SEATS** (a través del paquete R `seasonal`), incluyendo un regresor de días hábiles construido a partir de la serie diaria de tipo de cambio del BCRA (`com3500.xls`). Para la estética de los gráficos, las escalas del eje y ahora usan `scales::pretty_breaks(n = 6)` para generar saltos relativos en cada panel.
+Además, se incluyó el análisis del EMAE (Estimador Mensual de Actividad Económica) junto al VAB trimestral. Las series EMAE por sector se re-basan a promedio 2023 = 100 y hay una opción para desestacionalizar las series con **X-13ARIMA-SEATS** (a través del paquete R `seasonal`), incluyendo un regresor de días hábiles construido a partir de la serie diaria de tipo de cambio del BCRA (`com3500.xls`). Para la estética de los gráficos, las escalas del eje y ahora usan `scales::pretty_breaks(n = 6)` para generar saltos relativos en cada panel.
+
+El índice general del EMAE también se grafica sin re-basar, en su base original 2004=100.
 
 Ejemplos de gráficos EMAE están disponibles en el mismo `plot/`:
 
 * `general_emae.png` — Panorama general entre rubros (EMAE, mensual)
-* `general_emae_desest.png` — Idem, desestacionalizado con X-13ARIMA-SEATS
+* `2015-2026_general_emae_desest.png` — Idem, desestacionalizado con X-13ARIMA-SEATS
+* `EMAE_general_2023-07_2026-08.png` — EMAE general desestacionalizado (gris) y minería/petróleo, consumo, construcción e industria, jul-2023 a ago-2026
+* `EMAE_general_2023-07_2026-08_base2023-08.png` — Ídem, con base ago-2023 = 100
 * `suben_emae.png` — Rubros que crecieron (EMAE)
 * `bajan_emae.png` — Rubros que perdieron actividad (EMAE)
 
@@ -50,7 +54,7 @@ Otros rubros que siguen sin recuperar los niveles de 2023 son Fabricación de ma
 
 En resumen, no se observa una recuperación homogénea de la economía, sino que hay sectores donde la actividad continúa a niveles muy por debajo de los de 2023, como el comercio, la construcción y la industria, los cuales son los sectores que mayor empleo generan en la economía argentina. Mientras tanto, los sectores donde sí aumentó la actividad por encima de los niveles de 2023 son Intermediación financiera, impuestos netos de subsidios, hoteles y restaurantes, y minería.
 
-![general_emae](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/2015-2025_general_emae.png)
+![general_emae](https://raw.githubusercontent.com/rquiroga7/PIB-Argentina/main/plot/2015-2026_general_emae.png)
 
 Desestacionalización con X-13ARIMA-SEATS
 ----------------------------------------
@@ -84,7 +88,7 @@ La diferencia clave respecto al enfoque anterior (dividir cada valor por la cant
 Cómo reproducir
 ----------------
 
-1. Instale las dependencias de R si no tiene ya instaladas: `tidyverse`, `zoo`, `readxl`, `scales`, `seasonal` (que requiere `x13binary`).
+1. Instale las dependencias de R si no tiene ya instaladas: `dplyr`, `tidyr`, `stringr`, `tibble`, `ggplot2`, `zoo`, `readxl`, `scales`, `ggborderline`, `seasonal` (que requiere `x13binary`).
 2. Ejecute el script:
 
 ```bash

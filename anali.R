@@ -1,20 +1,24 @@
 # Cargar las librerías necesarias
-library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tibble)
 library(scales)
 library(ggplot2)
 library(zoo)
 #Cargar la libreria de read_excel
 library(readxl)
 library(ggborderline)
+library(seasonal)
 
 # Ensure a directory exists for plot output
 if (!dir.exists("plot")) {
   dir.create("plot")
 }
 
-# Leer archivo de VBP/VAB (actualizado hasta 03/2026)
+# Leer archivo de VBP/VAB (actualizado hasta 09/2026)
 # Usamos el archivo xls más reciente que contiene los cuadros
-data_raw <- read_excel("sh_VBP_VAB_03_26.xls", sheet = 4, skip = 5, col_names = FALSE)
+data_raw <- read_excel("sh_VBP_VAB_09_26.xls", sheet = 4, skip = 5, col_names = FALSE)
 # Mantener compatibilidad con el nombre usado anteriormente (data y data2)
 data <- data_raw
 data2 <- data_raw
@@ -437,7 +441,7 @@ deseasonalize_ts_seat <- function(data, dow_mat, frequency = 12,
 }
 
 plot_evolutionallemae <- function(data, names, filename, desde=as.Date("2004-01-01"),
-                                hasta=as.Date("2025-03-31"), deseasonalize=FALSE,
+                                hasta=as.Date("2026-08-31"), deseasonalize=FALSE,
                                 save_dir="plot", dow_mat=NULL) {
   max_mes = data3_long %>%
     filter(year == max(year)) %>%
@@ -533,6 +537,11 @@ last_m <- data3_long %>%
   select(fecha) %>%
   unique() %>%
   pull(fecha)
+
+latest_year_emae <- max(data3_long$year, na.rm = TRUE)
+
+# Guardar los valores originales (base 2004=100) para el gráfico agregado
+data3_long_raw <- data3_long
 
 #Rebase EMAE values to average 2023 = 100
 data3_long <- data3_long %>%
@@ -644,8 +653,8 @@ factor_no_tax_inter <- ifelse(is.na(norm_factors$mean_no_tax_inter) | norm_facto
 
 emae_weighted_totals <- emae_weighted_totals %>%
   mutate(
-    total_weighted = ifelse(is.na(factor_total), total_weighted, total_weighted * factor_total),
-    total_no_tax_inter = ifelse(is.na(factor_no_tax_inter), total_no_tax_inter, total_no_tax_inter * factor_no_tax_inter)
+    total_weighted = if (is.na(factor_total)) total_weighted else total_weighted * factor_total,
+    total_no_tax_inter = if (is.na(factor_no_tax_inter)) total_no_tax_inter else total_no_tax_inter * factor_no_tax_inter
   )
 
 message("Normalized total stats: min ", min(emae_weighted_totals$total_weighted, na.rm = TRUE), " max ", max(emae_weighted_totals$total_weighted, na.rm = TRUE), " mean ", mean(emae_weighted_totals$total_weighted, na.rm = TRUE))
@@ -653,7 +662,7 @@ message("Normalized no tax inter stats: min ", min(emae_weighted_totals$total_no
 message("Sample normalized totals: ", paste(head(emae_weighted_totals$total_weighted, 10), collapse = ", "))
 message("Sample normalized no tax inter: ", paste(head(emae_weighted_totals$total_no_tax_inter, 10), collapse = ", "))
 
-# Plot EMAE weighted totals (with and without the two sectors) for 2004-2025
+# Plot EMAE weighted totals (with and without the two sectors) for 2004-2026
 p_total_emae_comp_2004 <- emae_weighted_totals %>%
   ggplot(aes(x = fecha)) +
   geom_line(aes(y = total_weighted, color = "Total EMAE"), size = 1) +
@@ -661,15 +670,15 @@ p_total_emae_comp_2004 <- emae_weighted_totals %>%
   scale_color_manual(values = c("Total EMAE" = "black", "Total EMAE (sin impuestos e intermediación)" = "red")) +
   ylab("EMAE base 100 = 2023") +
   xlab("Año") +
-  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera (ponderado por VAB 2023)") +
+  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera\n(ponderado por VAB 2023)") +
   theme_light() +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = scales::comma) +
-  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2004-01-01", "2025-12-31"))) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2004-01-01", paste0(latest_year_emae, "-12-31")))) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), legend.position = "bottom")
 
-ggsave(file.path("plot", "Total_EMAE_compare_2004_2025.png"), plot = p_total_emae_comp_2004, dpi = 300)
+ggsave(file.path("plot", paste0("Total_EMAE_compare_2004_", latest_year_emae, ".png")), plot = p_total_emae_comp_2004, dpi = 300)
 
-# Plot for 2015-2025
+# Plot for 2015-2026
 p_total_emae_comp_2015 <- emae_weighted_totals %>%
   ggplot(aes(x = fecha)) +
   geom_line(aes(y = total_weighted, color = "Total EMAE"), size = 1) +
@@ -677,23 +686,163 @@ p_total_emae_comp_2015 <- emae_weighted_totals %>%
   scale_color_manual(values = c("Total EMAE" = "black", "Total EMAE (sin impuestos e intermediación)" = "red")) +
   ylab("EMAE base 100 = 2023") +
   xlab("Año") +
-  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera (ponderado por VAB 2023)") +
+  ggtitle("Total EMAE: con y sin impuestos e intermediación financiera\n(ponderado por VAB 2023)") +
   theme_light() +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 6), labels = scales::comma) +
-  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2015-01-01", "2025-12-31"))) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2015-01-01", paste0(latest_year_emae, "-12-31")))) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), legend.position = "bottom")
 
-ggsave(file.path("plot", "Total_EMAE_compare_2015_2025.png"), plot = p_total_emae_comp_2015, dpi = 300)
+ggsave(file.path("plot", paste0("Total_EMAE_compare_2015_", latest_year_emae, ".png")), plot = p_total_emae_comp_2015, dpi = 300)
 
 
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "J - Intermediación financiera"), "general_emae",hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), "2015-2025_general_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), paste0("2015-", latest_year_emae, "_general_emae"),desde = as.Date("2015-01-01"),hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones","J - Intermediación financiera"), paste0("2015-", latest_year_emae, "_general_emae"),desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
 #GANAN "H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"
 plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "suben_emae",hasta=last_m)
-plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "2015-2025_suben_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), "2015-2025_suben_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
+plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), paste0("2015-", latest_year_emae, "_suben_emae"),desde = as.Date("2015-01-01"),hasta=last_m)
+plot_evolutionallemae(data3_long, c("H - Hoteles y restaurantes", "C - Explotación de minas y canteras", "Impuestos netos de subsidios", "J - Intermediación financiera"), paste0("2015-", latest_year_emae, "_suben_emae"),desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
 #PIERDEN "D - Industria manufacturera", "F - Construcción", "H - Hoteles y restaurantes", "O - Otras actividades de servicios comunitarios, sociales y personales"
 plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "bajan_emae",hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "2015-2025_bajan_emae",desde = as.Date("2015-01-01"),hasta=last_m)
-plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), "2015-2025_bajan_emae",desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), paste0("2015-", latest_year_emae, "_bajan_emae"),desde = as.Date("2015-01-01"),hasta=last_m)
+plot_evolutionallemae(data3_long, c("D - Industria manufacturera", "F - Construcción", "G - Comercio mayorista, minorista y reparaciones", "O - Otras actividades de servicios comunitarios, sociales y personales"), paste0("2015-", latest_year_emae, "_bajan_emae"),desde = as.Date("2015-01-01"),deseasonalize = TRUE,dow_mat = dow_mat,hasta=last_m)
+
+# --- EMAE general (serie mensual oficial, base 2004=100) ---
+# Nuevo gráfico: índice agregado del EMAE sin re-basar a 2023=100,
+# desde julio 2023 hasta agosto 2026.
+emae_general_raw <- read_excel("sh_emae_mensual_base2004.xls", sheet = 1,
+                               skip = 4, col_names = FALSE)
+names(emae_general_raw) <- c("year", "mes", "indice_original", "var_interanual",
+                             "indice_desest", "var_mensual",
+                             "indice_tendencia", "var_tendencia")
+emae_general <- emae_general_raw %>%
+  mutate(year = suppressWarnings(as.numeric(year))) %>%
+  filter(!is.na(mes), mes != "") %>%
+  mutate(year = zoo::na.locf(year, na.rm = FALSE),
+         month = month_2_num(mes),
+         fecha = as.Date(paste0(year, "-", month, "-01"))) %>%
+  filter(!is.na(month), !is.na(fecha)) %>%
+  mutate(across(c(indice_original, indice_desest, indice_tendencia), as.numeric)) %>%
+  select(fecha, year, month, mes, indice_original, indice_desest, indice_tendencia)
+
+emae_general_desde <- as.Date("2023-07-01")
+emae_general_hasta <- as.Date("2026-08-01")
+
+# Sectores seleccionados para comparar con el EMAE general
+emae_sectores_desest <- data3_long_raw %>%
+  filter(name %in% c("C - Explotación de minas y canteras",
+                     "G - Comercio mayorista, minorista y reparaciones",
+                     "F - Construcción",
+                     "D - Industria manufacturera")) %>%
+  group_by(name) %>%
+  group_modify(~{
+    adj_values <- deseasonalize_ts_seat(., dow_mat = dow_mat)
+    mutate(., value = adj_values)
+  }) %>%
+  ungroup() %>%
+  mutate(serie = case_when(
+    name == "C - Explotación de minas y canteras" ~ "Minería y petróleo",
+    name == "G - Comercio mayorista, minorista y reparaciones" ~ "Consumo (comercio)",
+    name == "F - Construcción" ~ "Construcción",
+    name == "D - Industria manufacturera" ~ "Industria",
+    TRUE ~ name
+  )) %>%
+  filter(fecha >= emae_general_desde, fecha <= emae_general_hasta) %>%
+  select(fecha, serie, value)
+
+emae_general_desest <- emae_general %>%
+  filter(fecha >= emae_general_desde, fecha <= emae_general_hasta) %>%
+  transmute(fecha, serie = "EMAE general", value = indice_desest)
+
+emae_plot_data <- bind_rows(emae_general_desest, emae_sectores_desest) %>%
+  mutate(serie = factor(serie, levels = c(
+    "EMAE general", "Minería y petróleo", "Consumo (comercio)",
+    "Construcción", "Industria"
+  )))
+
+p_emae_general <- emae_plot_data %>%
+  ggplot(aes(x = fecha, y = value, color = serie, linewidth = serie)) +
+  geom_line() +
+  scale_color_manual(values = c(
+    "EMAE general" = "grey50",
+    "Minería y petróleo" = "#E69F00",
+    "Consumo (comercio)" = "#0072B2",
+    "Construcción" = "#009E73",
+    "Industria" = "#D55E00"
+  )) +
+  scale_linewidth_manual(values = c(
+    "EMAE general" = 1.5,
+    "Minería y petróleo" = 0.9,
+    "Consumo (comercio)" = 0.9,
+    "Construcción" = 0.9,
+    "Industria" = 0.9
+  ), guide = "none") +
+  ylab("Índice (base 2004=100)") +
+  xlab("Año") +
+  ggtitle("EMAE general y sectores seleccionados (series desestacionalizadas)") +
+  labs(subtitle = "Julio 2023 - agosto 2026",
+       caption = "Datos INDEC. EMAE general desestacionalizado en gris; sectores desestacionalizados con X-13ARIMA-SEATS.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina") +
+  theme_light() +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8), labels = comma) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "3 months",
+               date_labels = "%Y-%m", expand = c(0.01, 0.01)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "bottom", legend.title = element_blank(),
+        legend.text = element_text(size = 9)) +
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+ggsave(file.path("plot", "EMAE_general_2023-07_2026-08.png"), plot = p_emae_general, dpi = 300)
+
+# Variante con base ago-2023 = 100
+emae_plot_data_base <- emae_plot_data %>%
+  group_by(serie) %>%
+  mutate(value = value / value[match(as.Date("2023-08-01"), fecha)] * 100) %>%
+  ungroup()
+
+emae_label_df <- emae_plot_data_base %>%
+  group_by(serie) %>%
+  slice_max(fecha, n = 1) %>%
+  ungroup() %>%
+  mutate(label = sprintf("%+.1f", value - 100))
+
+p_emae_general_base <- emae_plot_data_base %>%
+  ggplot(aes(x = fecha, y = value, color = serie, linewidth = serie)) +
+  geom_line() +
+  geom_text(data = emae_label_df,
+            aes(x = fecha, y = value, label = label, color = serie),
+            inherit.aes = FALSE, hjust = 0, nudge_x = 20,
+            size = 3.5, fontface = "bold", show.legend = FALSE) +
+  scale_color_manual(
+    values = c(
+      "EMAE general" = "grey50",
+      "Minería y petróleo" = "#E69F00",
+      "Consumo (comercio)" = "#0072B2",
+      "Construcción" = "#009E73",
+      "Industria" = "#D55E00"
+    ),
+    breaks = c("Minería y petróleo", "EMAE general", "Consumo (comercio)",
+               "Industria", "Construcción")
+  ) +
+  scale_linewidth_manual(values = c(
+    "EMAE general" = 1.5,
+    "Minería y petróleo" = 0.9,
+    "Consumo (comercio)" = 0.9,
+    "Construcción" = 0.9,
+    "Industria" = 0.9
+  ), guide = "none") +
+  ylab("Índice (ago-2023 = 100)") +
+  xlab("Año") +
+  ggtitle("EMAE general y sectores seleccionados (base ago-2023 = 100)") +
+  labs(subtitle = "Julio 2023 - agosto 2026",
+       caption = "Datos INDEC. Series desestacionalizadas; EMAE general en gris; base ago-2023 = 100.\nAnálisis y visualización por Rodrigo Quiroga. Ver github.com/rquiroga7/PIB-Argentina") +
+  theme_light() +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8), labels = comma) +
+  scale_x_date(minor_breaks = NULL, date_breaks = "3 months",
+               date_labels = "%Y-%m", expand = expansion(mult = c(0.01, 0.13))) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "bottom", legend.title = element_blank(),
+        legend.text = element_text(size = 9)) +
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+ggsave(file.path("plot", "EMAE_general_2023-07_2026-08_base2023-08.png"),
+       plot = p_emae_general_base, dpi = 300)
